@@ -31,7 +31,7 @@ public class NewUser {
 
 	
 	@NotEmpty
-	private String email;
+	private String mail;
 
 	private String rol;
 

@@ -23,6 +23,6 @@ public class JwtEntityPoint implements AuthenticationEntryPoint {
             AuthenticationException authException) throws IOException, ServletException {
                 logger.error("Fail en el commence");
 
-                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "No aturoziado");
+                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "No autorizado");
     }
 }

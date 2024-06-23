@@ -21,10 +21,10 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 	  boolean existsByMail(String mail);
 	
 	  @Modifying
-	  @Query(value = "  UPDATE user SET user.nombre = :name , user.password = :password, user.username =  :username WHERE user.id = :id",
+	  @Query(value = "  UPDATE user SET user.name = :name , user.password = :password, user.username =  :username,  user.mail= :mail,user.modified = :modify WHERE user.id = :id",
 //			  update Users u set u.status = ? where u.name = )
 	    nativeQuery = true)
-	  int updateUserSetStatusForNameNative(String name, String password, String username, UUID id);
+	  int updateUserSetStatusForNameNative(String name, String password, String username, UUID id,  String mail, LocalDateTime modify);
 
 	  
 	  @Modifying

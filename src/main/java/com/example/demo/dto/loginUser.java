@@ -1,7 +1,12 @@
 package com.example.demo.dto;
 
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
+
 import javax.validation.constraints.NotEmpty;
 
+@NoArgsConstructor
+@AllArgsConstructor
 public class loginUser {
 	
 	@NotEmpty

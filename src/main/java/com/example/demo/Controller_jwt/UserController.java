@@ -51,139 +51,136 @@ public class UserController {
 	JwtProvider jwtProvider;
 
 	@Autowired
-	private UserService usuarioService;
+	private UserService userService;
 
 	@Autowired
 	private ValidEmail validEmail;
 
-	public static Log LOG = LogFactory.getLog(UserController.class);
-	public static Gson gson = new Gson();
+    private static final Log LOG = LogFactory.getLog(UserController.class);
+    private static final Gson gson = new Gson();
 
-	User u = new User();
+    @PostMapping("/new")
+    public ResponseEntity<?> nuevo(@Valid @RequestBody NewUser nuevoUser, BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(new Mensaje("Misplaced or invalid fields"));
+        }
 
-	@RequestMapping(value = "/new", method = RequestMethod.POST)
-	public ResponseEntity<?> nuevo(@Valid @RequestBody NewUser nuevoUser, BindingResult bindingResult) {
-		if (bindingResult.hasErrors())
-			return new ResponseEntity(new Mensaje("Campos mal puestos o invalidos"), HttpStatus.BAD_REQUEST);
-		if (usuarioService.loadUserByUsername(nuevoUser.getUsername()))
-			return new ResponseEntity(new Mensaje("Ese nombre ya existe"), HttpStatus.BAD_REQUEST);
-		if (!validEmail.isValidEmail(nuevoUser.getEmail()))
-			return new ResponseEntity(new Mensaje("Mail invalido"), HttpStatus.BAD_REQUEST);
-		if (usuarioService.loadUserByMail(nuevoUser.getEmail()))
-			return new ResponseEntity(new Mensaje("Ese Mail ya existe"), HttpStatus.BAD_REQUEST);
+        if (!validEmail.isValidEmail(nuevoUser.getMail())) {
+            return ResponseEntity.badRequest().body(new Mensaje("Mail invalid"));
+        }
 
-		try {
-			User user = new User(nuevoUser.getName(), nuevoUser.getUsername(),
-					passwordEncoder.encode(nuevoUser.getPassword()));
+        if (userService.loadUserByMail(nuevoUser.getMail())) {
+            return ResponseEntity.badRequest().body(new Mensaje("That Mail already exists"));
+        }
 
-			Set<Rol> roles = new HashSet<>();
-			user.setPhones(nuevoUser.getPhones());
-			roles.add(rolService.getRolByName(RolName.ROLE_USER).get());
+        if (userService.loadUserByUsername(nuevoUser.getUsername())) {
+            return ResponseEntity.badRequest().body(new Mensaje("That name already exists"));
+        }
+
+        try {
+            User user = createUserFromNewUser(nuevoUser);
+            userService.crearUser(user);
+            return ResponseEntity.status(HttpStatus.CREATED).body(new Mensaje("User Save"));
+        } catch (Exception e) {
+            LOG.error("Error saving user", e);
+            return ResponseEntity.badRequest().body(new Mensaje("Fail Saving User"));
+        }
+    }
+
+    private User createUserFromNewUser(NewUser nuevoUser) {
+        User user = new User(nuevoUser.getName(), nuevoUser.getUsername(), passwordEncoder.encode(nuevoUser.getPassword()));
+        user.setMail(nuevoUser.getMail());
+		user.setPhones(nuevoUser.getPhones());
+
+        Set<Rol> roles = new HashSet<>();
+        roles.add(rolService.getRolByName(RolName.ROLE_USER).orElseThrow(() -> new RuntimeException("Role not found: ROLE_USER")));
+
+        if ("admin".equalsIgnoreCase(nuevoUser.getRol())) {
+            roles.add(rolService.getRolByName(RolName.ROLE_ADMIN).orElseThrow(() -> new RuntimeException("Role not found: ROLE_ADMIN")));
+        }
+        user.setRoles(roles);
+
+        return user;
+    }
+
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@Valid @RequestBody loginUser login, BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(new Mensaje("Misplaced or invalid fields"));
+        }
+
+        Authentication auth = authenticationManager.authenticate(
+                new UsernamePasswordAuthenticationToken(login.getUsername(), login.getPassword()));
+        SecurityContextHolder.getContext().setAuthentication(auth);
+
+        String jwt = jwtProvider.generateToken(auth);
+        UserDetails userDetails = (UserDetails) auth.getPrincipal();
+        userService.setTokenBd(jwt, login.getUsername());
+
+        JwtDto jwtDto = new JwtDto(jwt, userDetails.getUsername(), userDetails.getAuthorities());
+        return ResponseEntity.ok(jwtDto);
+    }
+
+    @GetMapping("/users")
+    public ResponseEntity<List<User>> getAllUsers() {
+        try {
+            List<User> listUsers = userService.getUsers();
+            return ResponseEntity.ok(listUsers);
+        } catch (HibernateException e) {
+            LOG.error("Error fetching users", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+    }
+
+    @GetMapping("/users/find/{id}")
+	public ResponseEntity<?> findByID(@PathVariable UUID id) {
+
+        try {
+            User user = userService.findById(id);
+            if (user == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new Mensaje("User not found"));
+            }
+            return ResponseEntity.ok(user);
+        } catch (HibernateException e) {
+            LOG.error("Error finding user", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new Mensaje("Internal Server Error"));
+        }
+    }
+
+    @DeleteMapping("/users/delete/{id}")
+    public ResponseEntity<?> deleteUser(@PathVariable UUID id) {
+
+        try {
+			User user = userService.findById(id);
+            if (user == null) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new Mensaje("User not found"));
+            }else{
+				userService.deleteUser(id);
+				return ResponseEntity.ok(new Mensaje("User Deleted"));
+			}
+        } catch (HibernateException e) {
+            LOG.error("Error deleting user", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new Mensaje("Internal Server Error"));
+        }
+    }
+
+    @PostMapping("/users/edit/{id}")
+    public ResponseEntity<?> editUser(@PathVariable UUID id, @Valid @RequestBody NewUser nuevoUser, BindingResult bindingResult) {
+        if (bindingResult.hasErrors()) {
+            return ResponseEntity.badRequest().body(new Mensaje("Misplaced or invalid fields"));
+        }
+		User user = userService.findById(id);
+		if (user == null) {
+			return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new Mensaje("User not found"));
+		}else{
 		
-			if (nuevoUser.getRol() != null && nuevoUser.getRol().equalsIgnoreCase("admin"))
-				roles.add(rolService.getRolByName(RolName.ROLE_ADMIN).get());
-			user.setRoles(roles);
+        user = new User(id, nuevoUser.getName(), nuevoUser.getUsername(), passwordEncoder.encode(nuevoUser.getPassword()));
+        user.setMail(nuevoUser.getMail());
+        
 
-			usuarioService.crearUser(user);
-			return new ResponseEntity(new Mensaje("User Guardado"), HttpStatus.CREATED);
+        userService.editarUser(user);
+		return ResponseEntity.status(HttpStatus.CREATED).body(new Mensaje("User Updated"));
 
-		} catch (Exception e) {
-			System.out.println(e);
-			return new ResponseEntity(new Mensaje("Fallo"), HttpStatus.BAD_REQUEST);
 		}
-
-	}
-
-	@RequestMapping(value = "/login", method = RequestMethod.POST)
-	public ResponseEntity<JwtDto> login(@Valid @RequestBody loginUser login, BindingResult binding) {
-		if (binding.hasErrors())
-			return new ResponseEntity(new Mensaje("Campos mal puestos o invalidos"), HttpStatus.BAD_REQUEST);
-		Authentication auth = authenticationManager
-				.authenticate(new UsernamePasswordAuthenticationToken(login.getUsername(), login.getPassword()));
-		SecurityContextHolder.getContext().setAuthentication(auth);
-		String jwt = jwtProvider.generateToken(auth);
-		UserDetails userDe = (UserDetails) auth.getPrincipal();
-
-		usuarioService.setTokenBd(jwt, login.getUsername());
-		JwtDto jwtDto = new JwtDto(jwt, userDe.getUsername(), userDe.getAuthorities());
-
-		return new ResponseEntity(jwtDto, HttpStatus.OK);
-	}
-
-	@RequestMapping(value = "/users", method = RequestMethod.GET)
-	@ResponseBody
-	public ResponseEntity<List<User>> getAllUsers() {
-		List<User> listUsers = null;
-		try {
-			listUsers = usuarioService.getUsers();
-			return new ResponseEntity<>(listUsers, HttpStatus.OK);
-		} catch (HibernateException e) {
-			LOG.info(" Error : " + e.getMessage());
-			return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
-		}
-	}
-
-	@RequestMapping(value = "/users/add", method = RequestMethod.POST)
-	@ResponseBody
-	public ResponseEntity<User> addUser(@RequestBody User user) {
-		User usuario = null;
-		try {
-
-			usuario = usuarioService.crearUser(user);
-
-			return new ResponseEntity<>(usuario, HttpStatus.OK);
-		} catch (HibernateException e) {
-			LOG.error("Error: " + e.getMessage());
-			return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
-		}
-	}
-
-	@RequestMapping(value = "/users/buscar/{id}", method = RequestMethod.GET)
-	@ResponseBody
-	public ResponseEntity<User> buscarByID(@PathVariable UUID id) {
-		User usuario = null;
-		try {
-			usuario = usuarioService.buscarById(id);
-
-			return new ResponseEntity<>(usuario, HttpStatus.OK);
-		} catch (HibernateException e) {
-			LOG.error("Error: " + e.getMessage());
-			return new ResponseEntity<>(null, HttpStatus.INTERNAL_SERVER_ERROR);
-		}
-	}
-
-	@RequestMapping(value = "/users/eliminar/{id}", method = RequestMethod.DELETE)
-	@ResponseBody
-	public boolean deleteUser(@PathVariable UUID id) {
-		boolean resultado = false;
-		try {
-			resultado = usuarioService.deleteUser(id);
-
-		} catch (HibernateException e) {
-			LOG.error(" Error : " + e.getMessage());
-		}
-		return resultado;
-	}
-
-	@RequestMapping(value = "/users/editar/{id}", method = RequestMethod.POST)
-	public ResponseEntity<?> editarUser(@Valid @RequestBody NewUser nuevoUser, BindingResult bindingResult) {
-		if (bindingResult.hasErrors())
-			return new ResponseEntity(new Mensaje("Campos mal puestos o invalidos"), HttpStatus.BAD_REQUEST);
-
-		User user = new User(nuevoUser.getId(), nuevoUser.getName(), nuevoUser.getUsername(),
-				passwordEncoder.encode(nuevoUser.getPassword()));
-
-		Set<Rol> roles = new HashSet<>();
-
-		if (nuevoUser.getRol() != null && nuevoUser.getRol().equalsIgnoreCase("admin")) {
-			usuarioService.actualizarRol(user.getId());
-		}
-		// roles.add(rolService.getRolByName(RolName.ROLE_ADMIN).get());
-		// user.setRoles( roles);
-
-		usuarioService.editarUser(user);
-		return new ResponseEntity(new Mensaje("User Actualizado"), HttpStatus.CREATED);
-
-	}
-
+    }
 }

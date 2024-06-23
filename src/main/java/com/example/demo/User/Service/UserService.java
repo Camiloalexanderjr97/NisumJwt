@@ -27,17 +27,15 @@ public class UserService {
 		try {
 			List<User> listadoUser = userRepository.findAll();
 
-
 			return listadoUser;
-		
-	
-			
+
 		} catch (Exception e) {
 			// TODO: handle exception
 			System.out.println(e);
 			return null;
 		}
 	}
+
 	public boolean deleteUser(UUID id) {
 		boolean resultado = false;
 		try {
@@ -81,7 +79,7 @@ public class UserService {
 
 		boolean resultado = false;
 		if (userRepository.updateUserSetStatusForNameNative(user.getName(), user.getPassword(), user.getUsername(),
-				user.getId()) != 1) {
+				user.getId(),user.getMail(), LocalDateTime.now()) != 1) {
 			resultado = true;
 		}
 
@@ -131,8 +129,13 @@ public class UserService {
 		}
 	}
 
-	public User buscarById(UUID id) {
-		return userRepository.findById(id).get();
+	public User findById(UUID id) {
+		try {
+			return userRepository.findById(id).get();
+
+		} catch (Exception e) {
+			return null;
+		}
 	}
 
 }
