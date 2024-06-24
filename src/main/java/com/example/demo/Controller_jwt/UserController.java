@@ -11,7 +11,6 @@ import com.example.demo.dto.JwtDto;
 import com.example.demo.dto.Mensaje;
 import com.example.demo.dto.NewUser;
 import com.example.demo.dto.loginUser;
-import com.google.gson.Gson;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.hibernate.HibernateException;
@@ -57,7 +56,6 @@ public class UserController {
 	private ValidEmail validEmail;
 
     private static final Log LOG = LogFactory.getLog(UserController.class);
-    private static final Gson gson = new Gson();
 
     @PostMapping("/new")
     public ResponseEntity<?> nuevo(@Valid @RequestBody NewUser nuevoUser, BindingResult bindingResult) {
@@ -74,7 +72,7 @@ public class UserController {
         }
 
         if (userService.loadUserByUsername(nuevoUser.getUsername())) {
-            return ResponseEntity.badRequest().body(new Mensaje("That name already exists"));
+            return ResponseEntity.badRequest().body(new Mensaje("That username already exists"));
         }
 
         try {
