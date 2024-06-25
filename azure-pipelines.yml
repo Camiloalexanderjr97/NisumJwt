@@ -4,9 +4,10 @@
 # https://docs.microsoft.com/azure/devops/pipelines/languages/java
 
 pool:  
-  name: local 
+  vmImage: 'ubuntu-latest'
 
-trigger: none 
+trigger: 
+- master 
 
 steps:
 - task: Maven@3
